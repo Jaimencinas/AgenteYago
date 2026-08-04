@@ -1,0 +1,290 @@
+<title>Dashboard Facturación Sendcloud — Volta Baterías</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Dashboard interno: facturar etiquetas Sendcloud e informe de resultados.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --brand-400:#FF6E63; --brand-500:#EF4640; --brand-600:#E53935; --brand-700:#C62828;
+    --accent-blue:#2E5FDE; --whatsapp:#25D366;
+    --carbon-50:#F6F6F6; --carbon-100:#EDEDED; --carbon-200:#DBDBDB; --carbon-300:#B3B3B3; --carbon-400:#8C8C8C;
+    --carbon-700:#3B3B3B; --carbon-800:#2B2B2B; --carbon-900:#1A1A1A; --carbon-950:#121212;
+    --bg:var(--carbon-50); --surface:#FFFFFF; --border:var(--carbon-200); --text:var(--carbon-950); --text-muted:var(--carbon-400);
+  }
+  [data-theme="dark"]{
+    --bg:var(--carbon-900); --surface:var(--carbon-800); --border:var(--carbon-700); --text:#F6F6F6; --text-muted:var(--carbon-300);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:var(--carbon-900); --surface:var(--carbon-800); --border:var(--carbon-700); --text:#F6F6F6; --text-muted:var(--carbon-300);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    transition:background .3s ease,color .3s ease;
+  }
+  .font-display{ font-family:'Oswald',Arial Narrow,system-ui,sans-serif; }
+  .wrap{ max-width:960px; margin:0 auto; padding:2.5rem 1.25rem 4rem; }
+
+  header.top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:2.5rem; gap:1rem; }
+  .brand{ display:flex; align-items:center; gap:.6rem; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:9999px; background:var(--brand-600);
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700;
+    font-family:'Oswald',sans-serif; flex-shrink:0;
+  }
+  .brand-name{ font-family:'Oswald',sans-serif; font-weight:600; font-size:1.05rem; letter-spacing:.02em; }
+  .brand-name span{ color:var(--brand-600); }
+
+  .theme-toggle{
+    border:1.5px solid var(--border); background:var(--surface); color:var(--text-muted);
+    border-radius:9999px; padding:.45rem 1rem; font-size:.8rem; cursor:pointer;
+    display:flex; align-items:center; gap:.4rem; transition:all .2s ease;
+  }
+  .theme-toggle:hover{ color:var(--text); border-color:var(--carbon-300); }
+
+  .hero{ text-align:center; margin-bottom:2.75rem; }
+  .hero h1{
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:clamp(1.8rem,4vw,2.6rem);
+    letter-spacing:.01em; margin:0 0 .6rem;
+  }
+  .hero p{ color:var(--text-muted); font-size:.98rem; margin:0; max-width:560px; margin:0 auto; }
+
+  .cta-row{ display:flex; flex-direction:column; align-items:center; gap:.85rem; margin-bottom:3rem; }
+
+  .btn-primary{
+    display:inline-flex; align-items:center; gap:.6rem;
+    background:var(--brand-600); color:#fff; border:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-weight:600; font-size:1.02rem; padding:1rem 2.1rem; border-radius:9999px;
+    cursor:pointer; transition:all .3s ease;
+    box-shadow:0 0 0 1px rgba(229,57,53,.22), 0 8px 40px -8px rgba(229,57,53,.35);
+  }
+  .btn-primary:hover:not(:disabled){ background:var(--brand-500); transform:translateY(-1px);
+    box-shadow:0 0 0 1px rgba(229,57,53,.3), 0 12px 48px -8px rgba(229,57,53,.45); }
+  .btn-primary:active:not(:disabled){ background:var(--brand-700); transform:translateY(0); }
+  .btn-primary:disabled{ opacity:.65; cursor:not-allowed; box-shadow:none; }
+  .btn-primary svg{ transition:transform .3s ease; }
+  .btn-primary:hover:not(:disabled) svg{ transform:translateX(3px); }
+
+  .btn-secondary{
+    background:none; border:none; color:var(--text-muted); font-size:.88rem;
+    cursor:pointer; padding:.4rem .8rem; transition:color .2s ease; font-weight:500;
+  }
+  .btn-secondary:hover{ color:var(--text); }
+  [data-theme="light"] .btn-secondary:hover, :root:not([data-theme="dark"]) .btn-secondary:hover{ color:var(--carbon-700); }
+
+  .spinner{
+    width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff; animation:spin .7s linear infinite; display:none;
+  }
+  .btn-primary.loading .spinner{ display:inline-block; }
+  .btn-primary.loading .btn-label::after{ content:"Facturando…"; }
+  .btn-primary.loading .btn-label{ font-size:0; }
+  .btn-primary.loading .btn-label::after{ font-size:1.02rem; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .status-msg{ font-size:.85rem; color:var(--text-muted); min-height:1.2em; text-align:center; }
+  .status-msg.ok{ color:#1a9e4f; }
+  .status-msg.err{ color:var(--brand-600); }
+
+  section.informe{ margin-top:1rem; }
+  .informe-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:1.1rem; flex-wrap:wrap; gap:.5rem; }
+  .informe-head h2{ font-family:'Oswald',sans-serif; font-weight:600; font-size:1.3rem; margin:0; }
+  .informe-head .muted{ color:var(--text-muted); font-size:.82rem; }
+
+  .stats-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.9rem; margin-bottom:1.5rem; }
+  .stat-card{
+    background:var(--surface); border:1.5px solid var(--border); border-radius:1rem; padding:1.1rem 1.2rem;
+  }
+  .stat-card .label{ font-size:.76rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:.35rem; }
+  .stat-card .value{ font-family:'Oswald',sans-serif; font-weight:700; font-size:1.7rem; font-variant-numeric:tabular-nums; }
+  .stat-card.ok .value{ color:#1a9e4f; }
+  .stat-card.err .value{ color:var(--brand-600); }
+
+  .table-card{
+    background:var(--surface); border:1.5px solid var(--border); border-radius:1.5rem; overflow:hidden;
+  }
+  table{ width:100%; border-collapse:collapse; font-size:.86rem; }
+  thead th{
+    text-align:left; padding:.85rem 1.1rem; font-family:'Oswald',sans-serif; font-weight:500;
+    font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted);
+    border-bottom:1.5px solid var(--border);
+  }
+  tbody td{ padding:.85rem 1.1rem; border-bottom:1px solid var(--border); vertical-align:top; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:rgba(229,57,53,.03); }
+  td.mono{ font-variant-numeric:tabular-nums; color:var(--text-muted); font-size:.82rem; }
+
+  .badge{
+    display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .7rem; border-radius:9999px;
+    font-size:.74rem; font-weight:600;
+  }
+  .badge.ok{ background:rgba(26,158,79,.12); color:#1a9e4f; }
+  .badge.error{ background:rgba(229,57,53,.12); color:var(--brand-600); }
+  .badge.pending{ background:rgba(46,95,222,.12); color:var(--accent-blue); }
+
+  .empty-state{ padding:3rem 1.5rem; text-align:center; color:var(--text-muted); }
+  .empty-state svg{ margin-bottom:.75rem; opacity:.5; }
+
+  footer{ margin-top:3rem; text-align:center; color:var(--text-muted); font-size:.78rem; }
+  footer a{ color:var(--text-muted); }
+
+  @media (max-width:640px){
+    thead{ display:none; }
+    table, tbody, tr, td{ display:block; width:100%; }
+    tbody tr{ border-bottom:1.5px solid var(--border); padding:.9rem 1.1rem; }
+    tbody td{ border:none; padding:.25rem 0; display:flex; justify-content:space-between; gap:1rem; }
+    tbody td::before{ content:attr(data-label); color:var(--text-muted); font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark font-display">V</div>
+      <div class="brand-name">VOLTA <span>Baterías</span></div>
+    </div>
+    <button class="theme-toggle" id="themeToggle" type="button">
+      <span id="themeIcon">🌙</span>
+      <span id="themeLabel">Modo oscuro</span>
+    </button>
+  </header>
+
+  <div class="hero">
+    <h1 class="font-display">Facturación Sendcloud</h1>
+    <p>Dispara el escenario de Make.com que procesa las etiquetas de Sendcloud (Airtable → BOT VOLTA → WooCommerce → Holded) y consulta aquí el resultado.</p>
+  </div>
+
+  <div class="cta-row">
+    <button class="btn-primary font-sans" id="btnFacturar" type="button">
+      <span class="spinner"></span>
+      <span class="btn-label">Facturar Etiquetas Sendcloud</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </button>
+    <button class="btn-secondary" id="btnActualizar" type="button">↻ Actualizar informe</button>
+    <p class="status-msg" id="statusMsg"></p>
+  </div>
+
+  <section class="informe">
+    <div class="informe-head">
+      <h2 class="font-display">Último informe</h2>
+      <span class="muted" id="lastUpdate">Actualizado — datos de ejemplo</span>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="label">Etiquetas procesadas</div>
+        <div class="value font-display">18</div>
+      </div>
+      <div class="stat-card ok">
+        <div class="label">Facturadas OK</div>
+        <div class="value font-display">15</div>
+      </div>
+      <div class="stat-card err">
+        <div class="label">Con error</div>
+        <div class="value font-display">3</div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>ID Etiqueta</th>
+            <th>Estado</th>
+            <th>Factura Holded</th>
+            <th>Fecha</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody id="tablaInforme">
+          <tr>
+            <td class="mono" data-label="ID Etiqueta">SC-88213</td>
+            <td data-label="Estado"><span class="badge ok">✓ OK</span></td>
+            <td class="mono" data-label="Factura Holded">HLD-2026-0417</td>
+            <td class="mono" data-label="Fecha">04/08/2026 09:12</td>
+            <td data-label="Detalle">—</td>
+          </tr>
+          <tr>
+            <td class="mono" data-label="ID Etiqueta">SC-88214</td>
+            <td data-label="Estado"><span class="badge ok">✓ OK</span></td>
+            <td class="mono" data-label="Factura Holded">HLD-2026-0418</td>
+            <td class="mono" data-label="Fecha">04/08/2026 09:12</td>
+            <td data-label="Detalle">—</td>
+          </tr>
+          <tr>
+            <td class="mono" data-label="ID Etiqueta">SC-88215</td>
+            <td data-label="Estado"><span class="badge error">⚠ Error</span></td>
+            <td class="mono" data-label="Factura Holded">—</td>
+            <td class="mono" data-label="Fecha">04/08/2026 09:13</td>
+            <td data-label="Detalle">Pedido no encontrado en WooCommerce</td>
+          </tr>
+          <tr>
+            <td class="mono" data-label="ID Etiqueta">SC-88216</td>
+            <td data-label="Estado"><span class="badge pending">⏳ Pendiente</span></td>
+            <td class="mono" data-label="Factura Holded">—</td>
+            <td class="mono" data-label="Fecha">04/08/2026 09:13</td>
+            <td data-label="Detalle">Procesando en Make…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Dashboard interno · Facturación Sendcloud · Volta Baterías
+  </footer>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = document.getElementById('themeIcon');
+  const themeLabel = document.getElementById('themeLabel');
+
+  function systemPrefersDark(){
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function applyTheme(theme){
+    root.setAttribute('data-theme', theme);
+    localStorage.setItem('volta-theme', theme);
+    const isDark = theme === 'dark';
+    themeIcon.textContent = isDark ? '☀️' : '🌙';
+    themeLabel.textContent = isDark ? 'Modo claro' : 'Modo oscuro';
+  }
+  const saved = localStorage.getItem('volta-theme');
+  applyTheme(saved || (systemPrefersDark() ? 'dark' : 'light'));
+  themeToggle.addEventListener('click', () => {
+    applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  // Nota: esta es una maqueta visual estática (sin backend real).
+  // La versión Next.js conectará /api/facturar (webhook de Make) y /api/informe (Airtable).
+  const btnFacturar = document.getElementById('btnFacturar');
+  const btnActualizar = document.getElementById('btnActualizar');
+  const statusMsg = document.getElementById('statusMsg');
+
+  btnFacturar.addEventListener('click', () => {
+    btnFacturar.disabled = true;
+    btnFacturar.classList.add('loading');
+    statusMsg.textContent = '';
+    statusMsg.className = 'status-msg';
+    setTimeout(() => {
+      btnFacturar.disabled = false;
+      btnFacturar.classList.remove('loading');
+      statusMsg.textContent = 'Escenario disparado en Make (simulado). El informe se actualizará por polling contra Airtable.';
+      statusMsg.classList.add('ok');
+    }, 1600);
+  });
+
+  btnActualizar.addEventListener('click', () => {
+    statusMsg.textContent = 'Informe actualizado (simulado).';
+    statusMsg.className = 'status-msg ok';
+    document.getElementById('lastUpdate').textContent = 'Actualizado — ' + new Date().toLocaleString('es-ES');
+  });
+</script>
