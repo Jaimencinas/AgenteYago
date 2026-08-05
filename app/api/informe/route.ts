@@ -4,6 +4,7 @@ import { obtenerInforme } from "@/lib/airtable";
 const DATOS_EJEMPLO = [
   {
     id: "ejemplo-1",
+    creadoEn: "2026-08-04T09:12:00.000Z",
     campos: {
       "ID Etiqueta": "SC-88213",
       Estado: "OK",
@@ -13,6 +14,7 @@ const DATOS_EJEMPLO = [
   },
   {
     id: "ejemplo-2",
+    creadoEn: "2026-08-04T09:13:00.000Z",
     campos: {
       "ID Etiqueta": "SC-88215",
       Estado: "Error",
