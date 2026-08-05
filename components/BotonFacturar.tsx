@@ -22,6 +22,17 @@ export default function BotonFacturar({ onCompletado }: { onCompletado?: () => v
         tipo: "ok",
       });
       onCompletado?.();
+
+      // Le damos margen al escenario para arrancar de verdad antes de
+      // volver a apagarlo (si lo apagamos demasiado pronto, Make puede
+      // cancelar la ejecución que se acaba de lanzar).
+      setTimeout(() => {
+        fetch("/api/pausar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ activo: false }),
+        }).catch(() => {});
+      }, 8000);
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : "Error desconocido";
       setEstado({ texto: `Error al facturar: ${mensaje}`, tipo: "error" });

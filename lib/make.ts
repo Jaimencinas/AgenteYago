@@ -54,24 +54,25 @@ export async function cambiarEstadoEscenario(activo: boolean) {
  * activamos justo antes de lanzarlo y lo volvemos a apagar justo
  * después, dejando el toggle "Every 15 minutes" como estaba.
  */
+/**
+ * Activa el escenario y lo dispara. No lo vuelve a apagar aquí: eso lo hace
+ * el cliente unos segundos después (ver BotonFacturar), en una llamada
+ * aparte a /api/pausar. Si apagáramos el escenario en esta misma función,
+ * con el margen que necesita Make para arrancar de verdad la ejecución,
+ * nos arriesgamos a superar el límite de tiempo de las funciones de Netlify.
+ */
 export async function ejecutarEscenario() {
   await cambiarEstadoEscenario(true);
 
-  try {
-    const res = await fetch(`${baseUrl()}/scenarios/${scenarioId()}/run`, {
-      method: "POST",
-      headers: headers(),
-    });
+  const res = await fetch(`${baseUrl()}/scenarios/${scenarioId()}/run`, {
+    method: "POST",
+    headers: headers(),
+  });
 
-    if (!res.ok) {
-      const detalle = await res.text();
-      throw new Error(`Error al ejecutar el escenario de Make (${res.status}): ${detalle}`);
-    }
-
-    return await res.json();
-  } finally {
-    // Restaurar el estado apagado no debe hacer fallar la operación si el
-    // "run" ya se disparó correctamente.
-    await cambiarEstadoEscenario(false).catch(() => {});
+  if (!res.ok) {
+    const detalle = await res.text();
+    throw new Error(`Error al ejecutar el escenario de Make (${res.status}): ${detalle}`);
   }
+
+  return res.json();
 }
