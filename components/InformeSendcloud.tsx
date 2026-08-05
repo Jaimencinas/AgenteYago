@@ -32,6 +32,7 @@ export type InformeSendcloudRef = { actualizar: () => void };
 
 const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendcloud(_props, ref) {
   const [filas, setFilas] = useState<FilaAirtable[]>([]);
+  const [ordenCampos, setOrdenCampos] = useState<string[] | null>(null);
   const [esEjemplo, setEsEjemplo] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [actualizadoEn, setActualizadoEn] = useState<Date | null>(null);
@@ -46,6 +47,7 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
       const res = await fetch("/api/informe", { cache: "no-store" });
       const data = await res.json();
       setFilas(data.filas ?? []);
+      setOrdenCampos(data.orden ?? null);
       setEsEjemplo(Boolean(data.ejemplo));
       setActualizadoEn(new Date());
     } finally {
@@ -59,16 +61,22 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
     cargar();
   }, [cargar]);
 
-  const columnas = useMemo(
-    () =>
-      Array.from(
-        filas.reduce((acc, fila) => {
-          Object.keys(fila.campos).forEach((clave) => acc.add(clave));
-          return acc;
-        }, new Set<string>())
-      ),
-    [filas]
-  );
+  const columnas = useMemo(() => {
+    const presentes = filas.reduce((acc, fila) => {
+      Object.keys(fila.campos).forEach((clave) => acc.add(clave));
+      return acc;
+    }, new Set<string>());
+
+    if (ordenCampos) {
+      // Orden real de Airtable primero; cualquier campo que no esté en el
+      // esquema conocido (por si cambia) se añade al final.
+      const conocidos = ordenCampos.filter((c) => presentes.has(c));
+      const desconocidos = Array.from(presentes).filter((c) => !ordenCampos.includes(c));
+      return [...conocidos, ...desconocidos];
+    }
+
+    return Array.from(presentes);
+  }, [filas, ordenCampos]);
 
   const claveEstado = columnas.find((c) => c.toLowerCase().includes("estado"));
 

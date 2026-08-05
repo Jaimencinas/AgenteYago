@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { obtenerInforme } from "@/lib/airtable";
+import { obtenerInforme, obtenerOrdenCampos } from "@/lib/airtable";
 
 const DATOS_EJEMPLO = [
   {
@@ -27,10 +27,10 @@ const DATOS_EJEMPLO = [
 
 export async function GET() {
   try {
-    const filas = await obtenerInforme();
-    return NextResponse.json({ ok: true, filas, ejemplo: false });
+    const [filas, orden] = await Promise.all([obtenerInforme(), obtenerOrdenCampos()]);
+    return NextResponse.json({ ok: true, filas, orden, ejemplo: false });
   } catch (error) {
     // Airtable aún no configurado: devolvemos datos de ejemplo en vez de romper el dashboard.
-    return NextResponse.json({ ok: true, filas: DATOS_EJEMPLO, ejemplo: true });
+    return NextResponse.json({ ok: true, filas: DATOS_EJEMPLO, orden: null, ejemplo: true });
   }
 }

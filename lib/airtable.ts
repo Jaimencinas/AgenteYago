@@ -45,3 +45,29 @@ export async function obtenerInforme(): Promise<FilaAirtable[]> {
 
   return filas.sort((a, b) => (a.creadoEn < b.creadoEn ? 1 : -1));
 }
+
+/**
+ * Orden real de los campos tal y como están definidos en Airtable
+ * (vía la API de metadatos), para que el informe los muestre en ese
+ * mismo orden en vez del orden en que aparecen dentro de cada registro.
+ * Si el token no tiene permiso de esquema (scope schema.bases:read),
+ * devuelve null y el informe cae al orden de aparición como antes.
+ */
+export async function obtenerOrdenCampos(): Promise<string[] | null> {
+  if (!AIRTABLE_API_KEY || !AIRTABLE_BASE_ID || !AIRTABLE_TABLE_NAME) return null;
+
+  const res = await fetch(`https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`, {
+    headers: { Authorization: `Bearer ${AIRTABLE_API_KEY}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const tabla = (data.tables ?? []).find(
+    (t: { id: string; name: string }) => t.name === AIRTABLE_TABLE_NAME || t.id === AIRTABLE_TABLE_NAME
+  );
+  if (!tabla) return null;
+
+  return tabla.fields.map((f: { name: string }) => f.name);
+}
