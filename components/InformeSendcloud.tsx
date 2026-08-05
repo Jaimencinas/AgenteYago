@@ -28,7 +28,8 @@ function badgeEstado(valor: unknown) {
   return <span>{formatearValor(valor)}</span>;
 }
 
-export type InformeSendcloudRef = { actualizar: () => void };
+export type ResumenLote = { total: number; ok: number; error: number; texto: string };
+export type InformeSendcloudRef = { actualizar: () => Promise<ResumenLote | null> };
 
 // Filas creadas en Airtable con menos de esta diferencia entre sí se
 // consideran del mismo lote (misma pulsación de "Facturar" o misma
@@ -56,6 +57,13 @@ function agruparEnLotes(filas: FilaAirtable[]): Lote[] {
   return lotes;
 }
 
+function contarEstados(lote: Lote, claveEstado: string | undefined) {
+  if (!claveEstado) return { ok: 0, error: 0 };
+  const ok = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("ok")).length;
+  const error = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("error")).length;
+  return { ok, error };
+}
+
 function resumenLote(lote: Lote, claveEstado: string | undefined) {
   const mismaFecha = lote.inicio.toDateString() === lote.fin.toDateString();
   const rango = mismaFecha
@@ -64,9 +72,23 @@ function resumenLote(lote: Lote, claveEstado: string | undefined) {
 
   if (!claveEstado) return rango;
 
-  const ok = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("ok")).length;
-  const error = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("error")).length;
+  const { ok, error } = contarEstados(lote, claveEstado);
   return `${rango} · ${ok} OK · ${error} con error`;
+}
+
+function calcularColumnas(filas: FilaAirtable[], ordenCampos: string[] | null): string[] {
+  const presentes = filas.reduce((acc, fila) => {
+    Object.keys(fila.campos).forEach((clave) => acc.add(clave));
+    return acc;
+  }, new Set<string>());
+
+  if (ordenCampos) {
+    const conocidos = ordenCampos.filter((c) => presentes.has(c));
+    const desconocidos = Array.from(presentes).filter((c) => !ordenCampos.includes(c));
+    return [...conocidos, ...desconocidos];
+  }
+
+  return Array.from(presentes);
 }
 
 const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendcloud(_props, ref) {
@@ -81,15 +103,27 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
   const [fechaHasta, setFechaHasta] = useState("");
   const [lotesAbiertos, setLotesAbiertos] = useState<Set<string>>(new Set());
 
-  const cargar = useCallback(async () => {
+  const cargar = useCallback(async (): Promise<ResumenLote | null> => {
     setCargando(true);
     try {
       const res = await fetch("/api/informe", { cache: "no-store" });
       const data = await res.json();
-      setFilas(data.filas ?? []);
-      setOrdenCampos(data.orden ?? null);
+      const filasFrescas: FilaAirtable[] = data.filas ?? [];
+      const ordenFresco: string[] | null = data.orden ?? null;
+
+      setFilas(filasFrescas);
+      setOrdenCampos(ordenFresco);
       setEsEjemplo(Boolean(data.ejemplo));
       setActualizadoEn(new Date());
+
+      const columnasFrescas = calcularColumnas(filasFrescas, ordenFresco);
+      const claveEstadoFresca = columnasFrescas.find((c) => c.toLowerCase().includes("estado"));
+      const lotesFrescos = agruparEnLotes(filasFrescas);
+      const primerLote = lotesFrescos[0];
+      if (!primerLote) return null;
+
+      const { ok, error } = contarEstados(primerLote, claveEstadoFresca);
+      return { total: primerLote.filas.length, ok, error, texto: resumenLote(primerLote, claveEstadoFresca) };
     } finally {
       setCargando(false);
     }
@@ -101,22 +135,7 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
     cargar();
   }, [cargar]);
 
-  const columnas = useMemo(() => {
-    const presentes = filas.reduce((acc, fila) => {
-      Object.keys(fila.campos).forEach((clave) => acc.add(clave));
-      return acc;
-    }, new Set<string>());
-
-    if (ordenCampos) {
-      // Orden real de Airtable primero; cualquier campo que no esté en el
-      // esquema conocido (por si cambia) se añade al final.
-      const conocidos = ordenCampos.filter((c) => presentes.has(c));
-      const desconocidos = Array.from(presentes).filter((c) => !ordenCampos.includes(c));
-      return [...conocidos, ...desconocidos];
-    }
-
-    return Array.from(presentes);
-  }, [filas, ordenCampos]);
+  const columnas = useMemo(() => calcularColumnas(filas, ordenCampos), [filas, ordenCampos]);
 
   const claveEstado = columnas.find((c) => c.toLowerCase().includes("estado"));
 

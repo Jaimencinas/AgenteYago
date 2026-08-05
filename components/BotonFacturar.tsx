@@ -1,10 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import type { ResumenLote } from "@/components/InformeSendcloud";
 
-type Estado = { texto: string; tipo: "ok" | "error" | "" };
+type Estado = { texto: string; tipo: "ok" | "info" | "error" | "" };
 
-export default function BotonFacturar({ onCompletado }: { onCompletado?: () => void }) {
+export default function BotonFacturar({
+  onCompletado,
+}: {
+  onCompletado?: () => Promise<ResumenLote | null>;
+}) {
   const [cargando, setCargando] = useState(false);
   const [pausado, setPausado] = useState(false);
   const [cambiandoPausa, setCambiandoPausa] = useState(false);
@@ -18,20 +23,28 @@ export default function BotonFacturar({ onCompletado }: { onCompletado?: () => v
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       setEstado({
-        texto: "Escenario disparado en Make. El informe se actualizará por polling contra Airtable.",
+        texto: "Escenario disparado en Make. Recogiendo el resultado del lote…",
         tipo: "ok",
       });
-      onCompletado?.();
 
-      // Le damos margen al escenario para arrancar de verdad antes de
-      // volver a apagarlo (si lo apagamos demasiado pronto, Make puede
-      // cancelar la ejecución que se acaba de lanzar).
-      setTimeout(() => {
+      // Le damos margen al escenario para arrancar de verdad y a Make para
+      // escribir los resultados en Airtable antes de apagarlo y consultar
+      // el informe (si apagamos demasiado pronto, Make puede cancelar la
+      // ejecución que se acaba de lanzar).
+      setTimeout(async () => {
         fetch("/api/pausar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ activo: false }),
         }).catch(() => {});
+
+        const resumen = await onCompletado?.();
+        if (resumen) {
+          setEstado({
+            texto: `Lote recogido: ${resumen.total} pedido${resumen.total === 1 ? "" : "s"} (${resumen.ok} OK · ${resumen.error} con error) — ${resumen.texto}`,
+            tipo: "info",
+          });
+        }
       }, 8000);
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : "Error desconocido";
@@ -56,8 +69,8 @@ export default function BotonFacturar({ onCompletado }: { onCompletado?: () => v
       setPausado(nuevoPausado);
       setEstado({
         texto: nuevoPausado
-          ? "Escenario en pausa. No se ejecutará automáticamente."
-          : "Escenario reanudado.",
+          ? "Escenario en pausa: la ejecución automática cada 15 minutos queda desactivada. Puedes seguir facturando manualmente con el botón de arriba."
+          : "Escenario reanudado: volverá a ejecutarse automáticamente cada 15 minutos.",
         tipo: "ok",
       });
     } catch (error) {
@@ -128,8 +141,14 @@ export default function BotonFacturar({ onCompletado }: { onCompletado?: () => v
       </div>
 
       <p
-        className={`text-[0.85rem] min-h-[1.2em] text-center ${
-          estado.tipo === "ok" ? "text-green-600" : estado.tipo === "error" ? "text-brand-600" : "text-carbon-400"
+        className={`text-[0.85rem] min-h-[1.2em] text-center max-w-[520px] ${
+          estado.tipo === "ok"
+            ? "text-green-600"
+            : estado.tipo === "info"
+            ? "text-accent-blue"
+            : estado.tipo === "error"
+            ? "text-brand-600"
+            : "text-carbon-400"
         }`}
       >
         {estado.texto}

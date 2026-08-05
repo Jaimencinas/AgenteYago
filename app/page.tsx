@@ -32,7 +32,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <BotonFacturar onCompletado={() => informeRef.current?.actualizar()} />
+      <BotonFacturar onCompletado={() => informeRef.current?.actualizar() ?? Promise.resolve(null)} />
 
       <div className="flex justify-center -mt-8 mb-10">
         <button

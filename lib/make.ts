@@ -36,8 +36,10 @@ export async function cambiarEstadoEscenario(activo: boolean) {
 
   if (!res.ok) {
     const detalle = await res.text();
-    // "ya está activo/inactivo" no es un error real, solo lo ignoramos.
-    if (!detalle.includes("already")) {
+    // El escenario ya estaba en el estado pedido (ya activo o ya parado):
+    // no es un error real de cara al usuario, lo ignoramos.
+    const yaEnEseEstado = /already|is not running|is not activated/i.test(detalle);
+    if (!yaEnEseEstado) {
       throw new Error(`Error al cambiar el estado del escenario de Make (${res.status}): ${detalle}`);
     }
     return null;
