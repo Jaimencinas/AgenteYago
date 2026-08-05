@@ -30,6 +30,45 @@ function badgeEstado(valor: unknown) {
 
 export type InformeSendcloudRef = { actualizar: () => void };
 
+// Filas creadas en Airtable con menos de esta diferencia entre sí se
+// consideran del mismo lote (misma pulsación de "Facturar" o misma
+// ejecución programada). Es una aproximación por cercanía temporal:
+// Airtable no guarda todavía un "ID de ejecución" por fila.
+const UMBRAL_LOTE_MINUTOS = 5;
+
+type Lote = { id: string; inicio: Date; fin: Date; filas: FilaAirtable[] };
+
+function agruparEnLotes(filas: FilaAirtable[]): Lote[] {
+  const lotes: Lote[] = [];
+
+  for (const fila of filas) {
+    const fecha = new Date(fila.creadoEn);
+    const ultimo = lotes[lotes.length - 1];
+
+    if (ultimo && (ultimo.fin.getTime() - fecha.getTime()) / 60000 <= UMBRAL_LOTE_MINUTOS) {
+      ultimo.filas.push(fila);
+      if (fecha < ultimo.fin) ultimo.fin = fecha;
+    } else {
+      lotes.push({ id: fila.id, inicio: fecha, fin: fecha, filas: [fila] });
+    }
+  }
+
+  return lotes;
+}
+
+function resumenLote(lote: Lote, claveEstado: string | undefined) {
+  const mismaFecha = lote.inicio.toDateString() === lote.fin.toDateString();
+  const rango = mismaFecha
+    ? `${lote.fin.toLocaleDateString("es-ES")} · ${lote.fin.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}–${lote.inicio.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
+    : `${lote.fin.toLocaleString("es-ES")} – ${lote.inicio.toLocaleString("es-ES")}`;
+
+  if (!claveEstado) return rango;
+
+  const ok = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("ok")).length;
+  const error = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("error")).length;
+  return `${rango} · ${ok} OK · ${error} con error`;
+}
+
 const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendcloud(_props, ref) {
   const [filas, setFilas] = useState<FilaAirtable[]>([]);
   const [ordenCampos, setOrdenCampos] = useState<string[] | null>(null);
@@ -40,6 +79,7 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
   const [soloCompletos, setSoloCompletos] = useState(false);
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [lotesAbiertos, setLotesAbiertos] = useState<Set<string>>(new Set());
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -99,6 +139,22 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
       return true;
     });
   }, [filas, columnas, soloCompletos, fechaDesde, fechaHasta]);
+
+  const lotes = useMemo(() => agruparEnLotes(filasFiltradas), [filasFiltradas]);
+
+  // Al llegar datos nuevos, el lote más reciente empieza desplegado y el resto plegados.
+  useEffect(() => {
+    if (lotes.length > 0) setLotesAbiertos(new Set([lotes[0].id]));
+  }, [filas]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function alternarLote(id: string) {
+    setLotesAbiertos((prev) => {
+      const siguiente = new Set(prev);
+      if (siguiente.has(id)) siguiente.delete(id);
+      else siguiente.add(id);
+      return siguiente;
+    });
+  }
 
   function descargarExcel() {
     const filasExportar = filasFiltradas.map((fila) => {
@@ -205,17 +261,34 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {filasFiltradas.map((fila) => (
-                <tr key={fila.id} className="hover:bg-brand-600/[0.03] border-b border-carbon-200 dark:border-carbon-700 last:border-none">
-                  {columnas.map((col) => (
-                    <td key={col} className="px-[1.1rem] py-[0.85rem] align-top tabular-nums text-carbon-950 dark:text-carbon-50">
-                      {col === claveEstado ? badgeEstado(fila.campos[col]) : formatearValor(fila.campos[col])}
+            {lotes.map((lote) => {
+              const abierto = lotesAbiertos.has(lote.id);
+              return (
+                <tbody key={lote.id}>
+                  <tr
+                    onClick={() => alternarLote(lote.id)}
+                    className="cursor-pointer bg-carbon-50 dark:bg-carbon-900 hover:bg-brand-600/[0.05] border-b border-carbon-200 dark:border-carbon-700"
+                  >
+                    <td colSpan={columnas.length} className="px-[1.1rem] py-[0.7rem] font-display font-medium text-carbon-950 dark:text-carbon-50">
+                      <span className="inline-block w-4 transition-transform" style={{ transform: abierto ? "rotate(90deg)" : "rotate(0deg)" }}>
+                        ▸
+                      </span>{" "}
+                      Lote de {lote.filas.length} — {resumenLote(lote, claveEstado)}
                     </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
+                  </tr>
+                  {abierto &&
+                    lote.filas.map((fila) => (
+                      <tr key={fila.id} className="hover:bg-brand-600/[0.03] border-b border-carbon-200 dark:border-carbon-700 last:border-none">
+                        {columnas.map((col) => (
+                          <td key={col} className="px-[1.1rem] py-[0.85rem] align-top tabular-nums text-carbon-950 dark:text-carbon-50">
+                            {col === claveEstado ? badgeEstado(fila.campos[col]) : formatearValor(fila.campos[col])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                </tbody>
+              );
+            })}
           </table>
         )}
       </div>
