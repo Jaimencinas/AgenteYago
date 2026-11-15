@@ -93,16 +93,46 @@ function resumenLote(lote: Lote, claveEstado: string | undefined) {
   return `${rango} · ${ok} OK · ${error} con error${pendiente > 0 ? ` · ${pendiente} sin confirmar` : ""}`;
 }
 
-// Coloca la columna "Nº HOLDED" justo después de "ID" (el nº de pedido),
+const COLUMNA_CANAL = "CANAL";
+
+// Deduce la rama de Make por la que entró un pedido a partir de su número
+// y de la logística, replicando los filtros del router de Make. Se usa
+// solo como respaldo para filas antiguas que no tienen la columna CANAL
+// rellenada por Make.
+function deducirCanal(campos: Record<string, unknown>): string {
+  const claveId = Object.keys(campos).find((c) => c.trim().toLowerCase() === "id");
+  const claveLog = Object.keys(campos).find((c) => c.toLowerCase().includes("logist"));
+  const id = String(claveId ? campos[claveId] ?? "" : "").trim();
+  const logistica = String(claveLog ? campos[claveLog] ?? "" : "").trim();
+  if (logistica.toLowerCase() === "unstamped letter") return "Logist. Volta";
+  if (/^MKP/i.test(id)) return "Grupo Andrés";
+  if (/^\d{3}-\d{7}-\d{7}$/.test(id)) return "Amazon";
+  if (/^M\d{12}$/.test(id)) return "Mano a Mano";
+  if (/-[AB]$/i.test(id)) return "Leroy Merlin";
+  if (/^(29|30|31|32)\d{3}$/.test(id)) return "Web Volta";
+  return "";
+}
+
+// Garantiza que toda fila tenga CANAL: el valor que escribe Make si existe,
+// o el deducido del número de pedido para filas anteriores.
+function completarCanal(fila: FilaAirtable): FilaAirtable {
+  const actual = String(fila.campos[COLUMNA_CANAL] ?? "").trim();
+  if (actual) return fila;
+  return { ...fila, campos: { ...fila.campos, [COLUMNA_CANAL]: deducirCanal(fila.campos) } };
+}
+
+// Coloca "Nº HOLDED" y "CANAL" justo después de "ID" (el nº de pedido),
 // independientemente del orden que tenga en Airtable.
 function reordenarColumnas(columnas: string[]): string[] {
   const esHolded = (c: string) => c.toLowerCase().includes("holded");
+  const esCanal = (c: string) => c.trim().toUpperCase() === COLUMNA_CANAL;
   const esId = (c: string) => c.trim().toLowerCase() === "id";
   const holded = columnas.find(esHolded);
-  if (!holded) return columnas;
-  const resto = columnas.filter((c) => c !== holded);
+  const canal = columnas.find(esCanal);
+  const resto = columnas.filter((c) => c !== holded && c !== canal);
   const posId = resto.findIndex(esId);
-  resto.splice(posId === -1 ? 0 : posId + 1, 0, holded);
+  const insertar = [holded, canal].filter((c): c is string => Boolean(c));
+  resto.splice(posId === -1 ? 0 : posId + 1, 0, ...insertar);
   return resto;
 }
 
@@ -138,7 +168,7 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
     try {
       const res = await fetch("/api/informe", { cache: "no-store" });
       const data = await res.json();
-      const filasFrescas: FilaAirtable[] = data.filas ?? [];
+      const filasFrescas: FilaAirtable[] = (data.filas ?? []).map(completarCanal);
       const ordenFresco: string[] | null = data.orden ?? null;
 
       setFilas(filasFrescas);
