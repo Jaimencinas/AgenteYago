@@ -5,6 +5,15 @@ import type { ResumenLote } from "@/components/InformeSendcloud";
 
 type Estado = { texto: string; tipo: "ok" | "info" | "error" | "" };
 
+// Tiempos del sondeo del informe tras disparar el escenario.
+const MARGEN_PAUSA_MS = 8_000; // margen antes de apagar la programación en Make
+const INTERVALO_SONDEO_MS = 6_000; // cada cuánto se consulta Airtable
+const SONDEOS_ESTABLES_PARA_CERRAR = 4; // ~24 s seguidos sin filas nuevas => lote cerrado
+const SIN_FILAS_MAX_MS = 90_000; // si en este tiempo no aparece ninguna fila, paramos
+const MAX_ESPERA_MS = 8 * 60_000; // tope absoluto de espera
+
+const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export default function BotonFacturar({
   onCompletado,
 }: {
@@ -19,6 +28,10 @@ export default function BotonFacturar({
     setCargando(true);
     setEstado({ texto: "", tipo: "" });
     try {
+      // Foto del informe ANTES de disparar: sirve para distinguir el lote
+      // nuevo del último lote que ya estaba en Airtable.
+      const base = (await onCompletado?.()) ?? null;
+
       const res = await fetch("/api/facturar", { method: "POST" });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -27,25 +40,59 @@ export default function BotonFacturar({
         tipo: "ok",
       });
 
-      // Le damos margen al escenario para arrancar de verdad y a Make para
-      // escribir los resultados en Airtable antes de apagarlo y consultar
-      // el informe (si apagamos demasiado pronto, Make puede cancelar la
-      // ejecución que se acaba de lanzar).
-      setTimeout(async () => {
+      // Le damos margen al escenario para arrancar de verdad antes de apagar
+      // la programación (si apagamos demasiado pronto, Make puede cancelar
+      // la ejecución que se acaba de lanzar). La ejecución en curso sigue.
+      setTimeout(() => {
         fetch("/api/pausar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ activo: false }),
         }).catch(() => {});
+      }, MARGEN_PAUSA_MS);
 
-        const resumen = await onCompletado?.();
-        if (resumen) {
+      // Make escribe en Airtable una fila por pedido a medida que avanza, y
+      // con lotes grandes tarda varios minutos. En vez de esperar un tiempo
+      // fijo, sondeamos el informe y damos el lote por cerrado cuando lleva
+      // un rato sin aparecer filas nuevas.
+      const inicio = Date.now();
+      let ultimoTotal = 0;
+      let sondeosEstables = 0;
+      let resumen: ResumenLote | null = null;
+
+      while (Date.now() - inicio < MAX_ESPERA_MS) {
+        await esperar(INTERVALO_SONDEO_MS);
+        const actual = (await onCompletado?.()) ?? null;
+        const hayLoteNuevo =
+          actual !== null &&
+          (base === null || actual.texto !== base.texto || actual.total !== base.total);
+        const total = hayLoteNuevo && actual ? actual.total : 0;
+
+        if (total > 0) {
+          resumen = actual;
+          sondeosEstables = total === ultimoTotal ? sondeosEstables + 1 : 0;
+          ultimoTotal = total;
           setEstado({
-            texto: `Lote recogido: ${resumen.total} pedido${resumen.total === 1 ? "" : "s"} (${resumen.ok} OK · ${resumen.error} con error) — ${resumen.texto}`,
-            tipo: "info",
+            texto: `Recogiendo resultados… ${total} pedido${total === 1 ? "" : "s"} hasta ahora (${resumen?.ok ?? 0} OK · ${resumen?.error ?? 0} con error)`,
+            tipo: "ok",
           });
+          if (sondeosEstables >= SONDEOS_ESTABLES_PARA_CERRAR) break;
+        } else if (Date.now() - inicio > SIN_FILAS_MAX_MS) {
+          break;
         }
-      }, 8000);
+      }
+
+      if (resumen && ultimoTotal > 0) {
+        setEstado({
+          texto: `Lote recogido: ${resumen.total} pedido${resumen.total === 1 ? "" : "s"} (${resumen.ok} OK · ${resumen.error} con error) — ${resumen.texto}`,
+          tipo: "info",
+        });
+      } else {
+        setEstado({
+          texto: "Escenario ejecutado, pero no ha aparecido ningún pedido nuevo en Airtable (¿no había etiquetas pendientes?). Pulsa «Actualizar informe» para comprobarlo.",
+          tipo: "info",
+        });
+      }
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : "Error desconocido";
       setEstado({ texto: `Error al facturar: ${mensaje}`, tipo: "error" });
