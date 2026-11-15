@@ -14,7 +14,8 @@ const MAX_ESPERA_MS = 8 * 60_000; // tope absoluto de espera
 
 const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-const contadores = (r: ResumenLote | null) => (r ? ` (${r.ok} OK · ${r.error} con error)` : "");
+const contadores = (r: ResumenLote | null) =>
+  r ? ` (${r.ok} OK · ${r.error} con error${r.pendiente > 0 ? ` · ${r.pendiente} sin confirmar` : ""})` : "";
 
 export default function BotonFacturar({
   onCompletado,
@@ -85,9 +86,12 @@ export default function BotonFacturar({
       }
 
       if (resumen && ultimoTotal > 0) {
+        const conProblemas = resumen.error > 0 || resumen.pendiente > 0;
         setEstado({
-          texto: `Lote recogido: ${resumen.total} pedido${resumen.total === 1 ? "" : "s"}${contadores(resumen)} — ${resumen.texto}`,
-          tipo: "info",
+          texto: `${conProblemas ? "⚠ " : ""}Lote recogido: ${resumen.total} pedido${resumen.total === 1 ? "" : "s"}${contadores(resumen)} — ${resumen.texto}${
+            conProblemas ? ". Revisa las filas marcadas en el informe." : ""
+          }`,
+          tipo: conProblemas ? "error" : "info",
         });
       } else {
         setEstado({

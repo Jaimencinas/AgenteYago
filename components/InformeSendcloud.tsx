@@ -16,11 +16,11 @@ function formatearValor(valor: unknown): string {
 
 function badgeEstado(valor: unknown) {
   const texto = String(valor ?? "").toLowerCase();
-  if (texto.includes("ok") || texto.includes("factur")) {
-    return <span className="inline-flex items-center gap-1 rounded-full bg-green-600/10 text-green-600 text-[0.74rem] font-semibold px-[0.7rem] py-1">✓ {String(valor)}</span>;
-  }
   if (texto.includes("error")) {
     return <span className="inline-flex items-center gap-1 rounded-full bg-brand-600/10 text-brand-600 text-[0.74rem] font-semibold px-[0.7rem] py-1">⚠ {String(valor)}</span>;
+  }
+  if (texto.includes("ok") || texto.includes("factur")) {
+    return <span className="inline-flex items-center gap-1 rounded-full bg-green-600/10 text-green-600 text-[0.74rem] font-semibold px-[0.7rem] py-1">✓ {String(valor)}</span>;
   }
   if (texto.includes("pend")) {
     return <span className="inline-flex items-center gap-1 rounded-full bg-accent-blue/10 text-accent-blue text-[0.74rem] font-semibold px-[0.7rem] py-1">⏳ {String(valor)}</span>;
@@ -28,7 +28,7 @@ function badgeEstado(valor: unknown) {
   return <span>{formatearValor(valor)}</span>;
 }
 
-export type ResumenLote = { total: number; ok: number; error: number; texto: string };
+export type ResumenLote = { total: number; ok: number; error: number; pendiente: number; texto: string };
 export type InformeSendcloudRef = { actualizar: () => Promise<ResumenLote | null> };
 
 // Filas creadas en Airtable con menos de esta diferencia entre sí se
@@ -60,13 +60,27 @@ function agruparEnLotes(filas: FilaAirtable[]): Lote[] {
   return lotes;
 }
 
+type Estado = "ok" | "error" | "pendiente";
+
+// Clasifica el valor de la columna ESTADO que escribe Make:
+//  - vacío (filas anteriores a que existiera la columna) u "OK" → ok
+//  - contiene "error" → error
+//  - cualquier otra cosa (p. ej. "PENDIENTE": Make creó la fila pero no
+//    llegó a confirmar Holded) → pendiente
+function clasificarEstado(valor: unknown): Estado {
+  const texto = String(valor ?? "").trim().toLowerCase();
+  if (texto.includes("error")) return "error";
+  if (texto === "" || texto.includes("ok") || texto.includes("factur")) return "ok";
+  return "pendiente";
+}
+
 function contarEstados(lote: Lote, claveEstado: string | undefined) {
   // Sin columna "Estado": toda fila que Make ha escrito en PEDIDOS FACTURADOS
   // es un pedido procesado, así que cuenta como OK.
-  if (!claveEstado) return { ok: lote.filas.length, error: 0 };
-  const ok = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("ok")).length;
-  const error = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("error")).length;
-  return { ok, error };
+  if (!claveEstado) return { ok: lote.filas.length, error: 0, pendiente: 0 };
+  const cuenta = { ok: 0, error: 0, pendiente: 0 };
+  for (const f of lote.filas) cuenta[clasificarEstado(f.campos[claveEstado])]++;
+  return cuenta;
 }
 
 function resumenLote(lote: Lote, claveEstado: string | undefined) {
@@ -75,8 +89,8 @@ function resumenLote(lote: Lote, claveEstado: string | undefined) {
     ? `${lote.fin.toLocaleDateString("es-ES")} · ${lote.fin.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}–${lote.inicio.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
     : `${lote.fin.toLocaleString("es-ES")} – ${lote.inicio.toLocaleString("es-ES")}`;
 
-  const { ok, error } = contarEstados(lote, claveEstado);
-  return `${rango} · ${ok} OK · ${error} con error`;
+  const { ok, error, pendiente } = contarEstados(lote, claveEstado);
+  return `${rango} · ${ok} OK · ${error} con error${pendiente > 0 ? ` · ${pendiente} sin confirmar` : ""}`;
 }
 
 function calcularColumnas(filas: FilaAirtable[], ordenCampos: string[] | null): string[] {
@@ -125,11 +139,12 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
       const primerLote = lotesFrescos[0];
       if (!primerLote) return null;
 
-      const { ok, error } = contarEstados(primerLote, claveEstadoFresca);
+      const { ok, error, pendiente } = contarEstados(primerLote, claveEstadoFresca);
       return {
         total: primerLote.filas.length,
         ok,
         error,
+        pendiente,
         texto: resumenLote(primerLote, claveEstadoFresca),
       };
     } finally {
@@ -300,19 +315,31 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
                       <span className="inline-block w-4 transition-transform" style={{ transform: abierto ? "rotate(90deg)" : "rotate(0deg)" }}>
                         ▸
                       </span>{" "}
+                      {contarEstados(lote, claveEstado).error > 0 && (
+                        <span className="text-brand-600 mr-1" title="Hay pedidos con error en este lote">⚠</span>
+                      )}
                       Lote de {lote.filas.length} — {resumenLote(lote, claveEstado)}
                     </td>
                   </tr>
                   {abierto &&
-                    lote.filas.map((fila) => (
-                      <tr key={fila.id} className="hover:bg-brand-600/[0.03] border-b border-carbon-200 dark:border-carbon-700 last:border-none">
+                    lote.filas.map((fila) => {
+                      const estadoFila = claveEstado ? clasificarEstado(fila.campos[claveEstado]) : "ok";
+                      const fondoFila =
+                        estadoFila === "error"
+                          ? "bg-brand-600/[0.07] hover:bg-brand-600/[0.12]"
+                          : estadoFila === "pendiente"
+                          ? "bg-accent-blue/[0.06] hover:bg-accent-blue/[0.1]"
+                          : "hover:bg-brand-600/[0.03]";
+                      return (
+                      <tr key={fila.id} className={`${fondoFila} border-b border-carbon-200 dark:border-carbon-700 last:border-none`}>
                         {columnas.map((col) => (
                           <td key={col} className="px-[1.1rem] py-[0.85rem] align-top tabular-nums text-carbon-950 dark:text-carbon-50">
                             {col === claveEstado ? badgeEstado(fila.campos[col]) : formatearValor(fila.campos[col])}
                           </td>
                         ))}
                       </tr>
-                    ))}
+                      );
+                    })}
                 </tbody>
               );
             })}
