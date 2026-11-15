@@ -93,6 +93,19 @@ function resumenLote(lote: Lote, claveEstado: string | undefined) {
   return `${rango} · ${ok} OK · ${error} con error${pendiente > 0 ? ` · ${pendiente} sin confirmar` : ""}`;
 }
 
+// Coloca la columna "Nº HOLDED" justo después de "ID" (el nº de pedido),
+// independientemente del orden que tenga en Airtable.
+function reordenarColumnas(columnas: string[]): string[] {
+  const esHolded = (c: string) => c.toLowerCase().includes("holded");
+  const esId = (c: string) => c.trim().toLowerCase() === "id";
+  const holded = columnas.find(esHolded);
+  if (!holded) return columnas;
+  const resto = columnas.filter((c) => c !== holded);
+  const posId = resto.findIndex(esId);
+  resto.splice(posId === -1 ? 0 : posId + 1, 0, holded);
+  return resto;
+}
+
 function calcularColumnas(filas: FilaAirtable[], ordenCampos: string[] | null): string[] {
   const presentes = filas.reduce((acc, fila) => {
     Object.keys(fila.campos).forEach((clave) => acc.add(clave));
@@ -102,10 +115,10 @@ function calcularColumnas(filas: FilaAirtable[], ordenCampos: string[] | null): 
   if (ordenCampos) {
     const conocidos = ordenCampos.filter((c) => presentes.has(c));
     const desconocidos = Array.from(presentes).filter((c) => !ordenCampos.includes(c));
-    return [...conocidos, ...desconocidos];
+    return reordenarColumnas([...conocidos, ...desconocidos]);
   }
 
-  return Array.from(presentes);
+  return reordenarColumnas(Array.from(presentes));
 }
 
 const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendcloud(_props, ref) {
