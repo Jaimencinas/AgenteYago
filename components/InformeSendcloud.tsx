@@ -35,7 +35,10 @@ export type InformeSendcloudRef = { actualizar: () => Promise<ResumenLote | null
 // consideran del mismo lote (misma pulsación de "Facturar" o misma
 // ejecución programada). Es una aproximación por cercanía temporal:
 // Airtable no guarda todavía un "ID de ejecución" por fila.
-const UMBRAL_LOTE_MINUTOS = 5;
+// Dentro de una misma ejecución Make escribe las filas con segundos de
+// diferencia, así que 90 s separa bien dos pulsaciones seguidas del botón
+// sin partir un lote real.
+const UMBRAL_LOTE_MINUTOS = 1.5;
 
 type Lote = { id: string; inicio: Date; fin: Date; filas: FilaAirtable[] };
 
