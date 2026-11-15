@@ -28,7 +28,7 @@ function badgeEstado(valor: unknown) {
   return <span>{formatearValor(valor)}</span>;
 }
 
-export type ResumenLote = { total: number; ok: number; error: number; texto: string; conEstado: boolean };
+export type ResumenLote = { total: number; ok: number; error: number; texto: string };
 export type InformeSendcloudRef = { actualizar: () => Promise<ResumenLote | null> };
 
 // Filas creadas en Airtable con menos de esta diferencia entre sí se
@@ -61,7 +61,9 @@ function agruparEnLotes(filas: FilaAirtable[]): Lote[] {
 }
 
 function contarEstados(lote: Lote, claveEstado: string | undefined) {
-  if (!claveEstado) return { ok: 0, error: 0 };
+  // Sin columna "Estado": toda fila que Make ha escrito en PEDIDOS FACTURADOS
+  // es un pedido procesado, así que cuenta como OK.
+  if (!claveEstado) return { ok: lote.filas.length, error: 0 };
   const ok = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("ok")).length;
   const error = lote.filas.filter((f) => String(f.campos[claveEstado] ?? "").toLowerCase().includes("error")).length;
   return { ok, error };
@@ -72,8 +74,6 @@ function resumenLote(lote: Lote, claveEstado: string | undefined) {
   const rango = mismaFecha
     ? `${lote.fin.toLocaleDateString("es-ES")} · ${lote.fin.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}–${lote.inicio.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
     : `${lote.fin.toLocaleString("es-ES")} – ${lote.inicio.toLocaleString("es-ES")}`;
-
-  if (!claveEstado) return rango;
 
   const { ok, error } = contarEstados(lote, claveEstado);
   return `${rango} · ${ok} OK · ${error} con error`;
@@ -131,7 +131,6 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
         ok,
         error,
         texto: resumenLote(primerLote, claveEstadoFresca),
-        conEstado: Boolean(claveEstadoFresca),
       };
     } finally {
       setCargando(false);

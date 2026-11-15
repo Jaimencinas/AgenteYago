@@ -14,10 +14,7 @@ const MAX_ESPERA_MS = 8 * 60_000; // tope absoluto de espera
 
 const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-// Solo mostramos el desglose OK/error si la tabla de Airtable tiene una
-// columna "Estado"; si no, el contador siempre sería 0 · 0 y confunde.
-const contadores = (r: ResumenLote | null) =>
-  r && r.conEstado ? ` (${r.ok} OK · ${r.error} con error)` : "";
+const contadores = (r: ResumenLote | null) => (r ? ` (${r.ok} OK · ${r.error} con error)` : "");
 
 export default function BotonFacturar({
   onCompletado,
