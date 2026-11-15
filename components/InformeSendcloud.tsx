@@ -28,7 +28,7 @@ function badgeEstado(valor: unknown) {
   return <span>{formatearValor(valor)}</span>;
 }
 
-export type ResumenLote = { total: number; ok: number; error: number; texto: string };
+export type ResumenLote = { total: number; ok: number; error: number; texto: string; conEstado: boolean };
 export type InformeSendcloudRef = { actualizar: () => Promise<ResumenLote | null> };
 
 // Filas creadas en Airtable con menos de esta diferencia entre sí se
@@ -126,7 +126,13 @@ const InformeSendcloud = forwardRef<InformeSendcloudRef>(function InformeSendclo
       if (!primerLote) return null;
 
       const { ok, error } = contarEstados(primerLote, claveEstadoFresca);
-      return { total: primerLote.filas.length, ok, error, texto: resumenLote(primerLote, claveEstadoFresca) };
+      return {
+        total: primerLote.filas.length,
+        ok,
+        error,
+        texto: resumenLote(primerLote, claveEstadoFresca),
+        conEstado: Boolean(claveEstadoFresca),
+      };
     } finally {
       setCargando(false);
     }

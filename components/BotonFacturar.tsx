@@ -14,6 +14,11 @@ const MAX_ESPERA_MS = 8 * 60_000; // tope absoluto de espera
 
 const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+// Solo mostramos el desglose OK/error si la tabla de Airtable tiene una
+// columna "Estado"; si no, el contador siempre sería 0 · 0 y confunde.
+const contadores = (r: ResumenLote | null) =>
+  r && r.conEstado ? ` (${r.ok} OK · ${r.error} con error)` : "";
+
 export default function BotonFacturar({
   onCompletado,
 }: {
@@ -73,7 +78,7 @@ export default function BotonFacturar({
           sondeosEstables = total === ultimoTotal ? sondeosEstables + 1 : 0;
           ultimoTotal = total;
           setEstado({
-            texto: `Recogiendo resultados… ${total} pedido${total === 1 ? "" : "s"} hasta ahora (${resumen?.ok ?? 0} OK · ${resumen?.error ?? 0} con error)`,
+            texto: `Recogiendo resultados… ${total} pedido${total === 1 ? "" : "s"} hasta ahora${contadores(resumen)}`,
             tipo: "ok",
           });
           if (sondeosEstables >= SONDEOS_ESTABLES_PARA_CERRAR) break;
@@ -84,7 +89,7 @@ export default function BotonFacturar({
 
       if (resumen && ultimoTotal > 0) {
         setEstado({
-          texto: `Lote recogido: ${resumen.total} pedido${resumen.total === 1 ? "" : "s"} (${resumen.ok} OK · ${resumen.error} con error) — ${resumen.texto}`,
+          texto: `Lote recogido: ${resumen.total} pedido${resumen.total === 1 ? "" : "s"}${contadores(resumen)} — ${resumen.texto}`,
           tipo: "info",
         });
       } else {
